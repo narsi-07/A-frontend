@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Web site created using create-react-app"
+    />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <!--
+      manifest.json provides metadata used when your web app is installed on a
+      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
+    -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <!--
+      Notice the use of %PUBLIC_URL% in the tags above.
+      It will be replaced with the URL of the `public` folder during the build.
+      Only files inside the `public` folder can be referenced from the HTML.
+
+      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
+      work correctly both with client-side routing and a non-root public URL.
+      Learn how to configure a non-root public URL by running `npm run build`.
+    -->
+    <title>React App</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <!--
+      This HTML file is a template.
+      If you open it directly in the browser, you will see an empty page.
+
+      You can add webfonts, meta tags, or analytics to this file.
+      The build step will place the bundled scripts into the <body> tag.
+
+      To begin the development, run `npm start` or `yarn start`.
+      To create a production bundle, use `npm run build` or `yarn build`.
+    -->
+
+    <script src="https://chatbackend-1-1x6n.onrender.com/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io('https://chatbackend-1-1x6n.onrender.com');
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+
+const conversation = document.querySelector(".conversation");
+
+let alreadyTyping = false;
+
+socket.on("numberOfOnline", (size) => {
+  document.querySelector(
+    ".online"
+  ).innerHTML = `${size.toLocaleString()} online now`;
+});
+
+document.querySelector("#start").addEventListener("click", () => {
+  socket.emit("start", socket.id);
+});
+
+socket.on("searching", (msg) => {
+  conversation.innerHTML = `<div class="message">${msg}</div>`;
+});
+
+socket.on("chatStart", (msg) => {
+  conversation.innerHTML = `<div class="message">${msg}</div>`;
+
+  document.querySelector("#stop").classList.remove("hide");
+
+  document.querySelector("#start").classList.add("hide");
+
+  document.querySelector("#text").disabled = false;
+
+  document.querySelector("#send").disabled = false;
+});
+
+document.querySelector(".form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  submitMessage();
+});
+
+document.querySelector("#text").onkeydown = (e) => {
+  if (e.keyCode === 13 && !e.shiftKey) {
+    e.preventDefault();
+    submitMessage();
+  }
+};
+
+document.querySelector("#text").addEventListener("input", (e) => {
+  if (!alreadyTyping) {
+    socket.emit("typing", "Stranger is typing...");
+
+    alreadyTyping = true;
+  }
+
+  if (e.target.value === "") {
+    socket.emit("doneTyping");
+
+    alreadyTyping = false;
+  }
+});
+
+document.querySelector("#text").addEventListener("blur", () => {
+  socket.emit("doneTyping");
+
+  alreadyTyping = false;
+});
+
+document.querySelector("#text").addEventListener("click", (e) => {
+  if (e.target.value !== "") {
+    socket.emit("typing", "Stranger is typing...");
+
+    alreadyTyping = true;
+  }
+});
+
+socket.on("newMessageToClient", (data) => {
+  const notStranger = data.id === socket.id;
+  const msg = htmlEncode(data.msg);
+
+  conversation.innerHTML += `
+        <div class="chat">
+            <span class="${notStranger ? "name blue" : "name red"}">${
+    notStranger ? "You: " : "Stranger: "
+  } </span>
+            <span class="text">${msg}</span>
+        </div>
+    `;
+
+  conversation.scrollTo(0, conversation.scrollHeight);
+});
+
+socket.on("strangerIsTyping", (msg) => {
+  conversation.innerHTML +=
+    conversation.innerHTML = `<div class="message typing">${msg}</div>`;
+
+  conversation.scrollTo(0, conversation.scrollHeight);
+});
+
+socket.on("strangerIsDoneTyping", () => {
+  const typing = document.querySelector(".typing");
+
+  if (typing) {
+    typing.remove();
+  }
+});
+
+socket.on("goodBye", (msg) => {
+  conversation.innerHTML += `<div class="message">${msg}</div>`;
+
+  reset();
+});
+
+document.querySelector("#stop").addEventListener("click", () => {
+  document.querySelector("#stop").classList.add("hide");
+
+  document.querySelector("#really").classList.remove("hide");
+});
+
+document.querySelector("#really").addEventListener("click", () => {
+  // stop conversation
+  socket.emit("stop");
+});
+
+socket.on("strangerDisconnected", (msg) => {
+  conversation.innerHTML += `<div class="message">${msg}</div>`;
+
+  reset();
+});
+
+socket.on("endChat", (msg) => {
+  conversation.innerHTML += `<div class="message">${msg}</div>`;
+
+  reset();
+});
+
+function submitMessage() {
+  const input = document.querySelector("#text");
+
+  if (/\S/.test(input.value)) {
+    socket.emit("doneTyping");
+
+    socket.emit("newMessageToServer", input.value);
+
+    input.value = "";
+
+    alreadyTyping = false;
+  }
+}
+
+function reset() {
+  document.querySelector("#start").classList.remove("hide");
+
+  document.querySelector("#stop").classList.add("hide");
+
+  document.querySelector("#really").classList.add("hide");
+
+  const text = document.querySelector("#text");
+
+  text.disabled = true;
+
+  text.value = "";
+
+  document.querySelector("#send").disabled = true;
+
+  const typing = document.querySelector(".typing");
+
+  if (typing) {
+    typing.remove();
+  }
+
+  alreadyTyping = false;
+
+  conversation.scrollTo(0, conversation.scrollHeight);
+}
+
+function htmlEncode(str) {
+  return String(str).replace(/[^\w. ]/gi, function (c) {
+    return "&#" + c.charCodeAt(0) + ";";
+  });
+}
+
+    </script>
+  </body>
+</html>
